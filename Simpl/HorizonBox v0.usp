@@ -1,0 +1,679 @@
+//******************************************************************************************* Compiler Directives
+// #ENABLE_DYNAMIC
+// #SYMBOL_NAME ""
+// #HINT ""
+// #PRINT_TO_TRACE
+// #DIGITAL_EXPAND 
+// #ANALOG_SERIAL_EXPAND 
+// #OUTPUT_SHIFT 
+// #HELP_PDF_FILE ""
+
+#CATEGORY "" 
+#DEFAULT_VOLATILE
+#ENABLE_STACK_CHECKING
+#ENABLE_TRACE
+
+//******************************************************************************************* Constant Definition
+//******************************************************************************************* Help
+
+#HELP_BEGIN
+
+ ********************************************************************
+ * (C)2017
+ * All rights Reserved
+ *            
+ * Crestron Ziggo HorizonBox Module by Gerard Haamke
+ *
+ * E-mail: G.J.Haamke@icloud.com
+ *
+ ********************************************************************
+ 
+#HELP_END		
+ 
+#DEFINE_CONSTANT KEY_POWER		 "\xE0\x00"
+#DEFINE_CONSTANT KEY_OK 		 "\xE0\x01"
+#DEFINE_CONSTANT KEY_BACK 		 "\xE0\x02"
+#DEFINE_CONSTANT KEY_CHAN_UP	 "\xE0\x06"
+#DEFINE_CONSTANT KEY_CHAN_DWN	 "\xE0\x07"
+#DEFINE_CONSTANT KEY_HELP		 "\xE0\x09"
+#DEFINE_CONSTANT KEY_MENU		 "\xE0\x0a"
+#DEFINE_CONSTANT KEY_GUIDE		 "\xE0\x0b"
+#DEFINE_CONSTANT KEY_INFO		 "\xE0\x0e"
+#DEFINE_CONSTANT KEY_TEXT		 "\xE0\x0f"
+#DEFINE_CONSTANT KEY_MENU1		 "\xE0\x11"
+#DEFINE_CONSTANT KEY_MENU2		 "\xE0\x15"
+#DEFINE_CONSTANT KEY_DPAD_UP	 "\xE1\x00"
+#DEFINE_CONSTANT KEY_DPAD_DOWN	 "\xE1\x01"
+#DEFINE_CONSTANT KEY_DPAD_LEFT	 "\xE1\x02"
+#DEFINE_CONSTANT KEY_DPAD_RIGHT	 "\xE1\x03"
+#DEFINE_CONSTANT KEY_NUM_0		 "\xE3\x00"
+#DEFINE_CONSTANT KEY_NUM_1		 "\xE3\x01"
+#DEFINE_CONSTANT KEY_NUM_2		 "\xE3\x02"
+#DEFINE_CONSTANT KEY_NUM_3		 "\xE3\x03"
+#DEFINE_CONSTANT KEY_NUM_4		 "\xE3\x04"
+#DEFINE_CONSTANT KEY_NUM_5		 "\xE3\x05"
+#DEFINE_CONSTANT KEY_NUM_6		 "\xE3\x06"
+#DEFINE_CONSTANT KEY_NUM_7		 "\xE3\x07"
+#DEFINE_CONSTANT KEY_NUM_8		 "\xE3\x08"
+#DEFINE_CONSTANT KEY_NUM_9		 "\xE3\x09"
+#DEFINE_CONSTANT KEY_PAUSE		 "\xE4\x00"
+#DEFINE_CONSTANT KEY_STOP		 "\xE4\x02"
+#DEFINE_CONSTANT KEY_RECORD		 "\xE4\x03"
+#DEFINE_CONSTANT KEY_FWD		 "\xE4\x05"
+#DEFINE_CONSTANT KEY_RWD		 "\xE4\x07"
+#DEFINE_CONSTANT KEY_MENU3		 "\xEF\x00"
+#DEFINE_CONSTANT KEY_UNKNOWN_0 	 "\xEF\x06"		// TIMESHIFT INFO
+#DEFINE_CONSTANT KEY_UNKNOWN_1	 "\xEF\x15"		// POWER
+#DEFINE_CONSTANT KEY_UNKNOWN_2	 "\xEF\x16"		// NR
+#DEFINE_CONSTANT KEY_UNKNOWN_3	 "\xEF\x17"		// RC PAIRING
+#DEFINE_CONSTANT KEY_UNKNOWN_4	 "\xEF\x19"		// TIMING
+#DEFINE_CONSTANT KEY_ONDEMAND	 "\xEF\x28"
+#DEFINE_CONSTANT KEY_DVR 		 "\xEF\x29"
+#DEFINE_CONSTANT KEY_TV  		 "\xEF\x2a"
+
+#DEFINE_CONSTANT KEY_PUSH  		 1
+#DEFINE_CONSTANT KEY_RELEASE  	 0
+
+
+//******************************************************************************************* Include Libraries
+//***********************************n******************************************************** Digital, Analog, Buffers, Serials
+DIGITAL_INPUT 
+	_SKIP_,
+	_SKIP_,
+	Debug,
+	_SKIP_,
+	Connect,
+	_SKIP_,
+	Power,
+	Help ,
+	Guide,
+	Info,
+	Text,
+	Menu,		
+	Menu1,
+	Menu2,
+	Menu3,			
+	Menu_Up,	 
+	Menu_Down,	 
+	Menu_Left,	 
+	Menu_Right,	
+	Menu_OK,  
+	Back, 
+	Num_0,		 
+	Num_1,		 
+	Num_2,		 
+	Num_3,		 
+	Num_4,		 
+	Num_5,		 
+	Num_6,		 
+	Num_7,		 
+	Num_8,		 
+	Num_9,	
+	Chan_Up,	 
+	Chan_Dwn,	 
+	Pause,		 
+	Stop,		 
+	Record,
+	Fwd,		 
+	Rwd,		 
+	Ondemand,	 
+	Unknown_0, 	 	
+	Unknown_1, 		 		
+	Unknown_2, 		 	
+	Unknown_3, 		 		
+	Unknown_4;	 	
+		
+	
+//******************************************************************************************* Socket Definitions
+TCP_CLIENT RFB_TCP_Client[512];
+TCP_CLIENT WEB_TCP_Client[512];
+//******************************************************************************************* Parameters
+STRING_PARAMETER IPAddress[15];
+INTEGER_PARAMETER Port;
+//******************************************************************************************* Parameter Properties
+//******************************************************************************************* Structures
+//******************************************************************************************* Variables
+INTEGER nConnected,nextChar,State;
+STRING sRxBufTmp[512],sRxBuf[512],temp[512],CMD[512],HexString[512];
+//******************************************************************************************* Functions
+
+STRING_FUNCTION PlotBufferHex(String data_in)
+{
+	HexString="";
+	
+	while(len(data_in) <> 0){
+
+		nextChar = getc(data_in); //  nget the next character
+		
+		MAKESTRING(temp, "%02X ",nextChar) ;
+		HexString = HexString + temp;	
+
+	}
+ Return (HexString);
+}
+
+INTEGER_FUNCTION RFB_TCPConnect()
+{
+	SIGNED_INTEGER snStatus; 
+	snStatus=SocketConnectClient (RFB_TCP_Client, IPAddress, Port, 0);
+	nConnected=ON;
+	
+	Return (snStatus);
+}
+
+INTEGER_FUNCTION SendKey(Integer KeyState, String Key)
+{	 
+	IF(nConnected =0)
+	{
+		RFB_TCPConnect();
+		Delay(100);
+	}
+	
+	IF (State=2){
+	
+			IF(KeyState=KEY_PUSH)
+			{
+				MAKESTRING(cmd, "\x04\x01\x00\x00\x00\x00%s",key) ;
+				SocketSend (RFB_TCP_Client,cmd);	
+				
+				IF(Debug)
+					Trace("Module HorizonBox: %s Send -> Press Key: %s : Hex: %s",GetSymbolInstanceName(),key, PlotBufferHex(cmd));
+			}
+			ELSE IF(KeyState=KEY_RELEASE)
+			{
+				MAKESTRING(cmd, "\x04\x00\x00\x00\x00\x00%s",key) ;				
+				SocketSend (RFB_TCP_Client,cmd);	
+				
+				IF(Debug)
+					Trace("Module  HorizonBox: %s Send -> Release Key: %s : Hex: %s",GetSymbolInstanceName(),key, PlotBufferHex(cmd));	
+			}
+	}
+	ELSE 
+	{
+		Return (0);
+	}
+}
+
+//******************************************************************************************* Socket Event Handlers
+
+SOCKETCONNECT RFB_TCP_Client
+{
+	IF(Debug)
+        Trace("Module HorizonBox: %s TCP_Client Connected!!",GetSymbolInstanceName());
+	 
+	nConnected=On;	
+}
+
+SOCKETDISCONNECT RFB_TCP_Client
+{
+	IF(Debug)
+		Trace("Module HorizonBox: %s TCP_Client disconnected!!",GetSymbolInstanceName());
+	nConnected=Off;
+	State=0;
+}
+
+SOCKETRECEIVE RFB_TCP_Client
+{	
+	sRxBufTmp=RFB_TCP_Client.SocketRxBuf;
+
+	IF (State=0)
+	{
+	
+		IF (FIND("\x0A", RFB_TCP_Client.SocketRxBuf))
+		{		
+			
+			sRxBuf=REMOVE("\x0A",RFB_TCP_Client.SocketRxBuf);
+			
+			IF (FIND("RFB", sRxBuf))
+			{
+				sRxBufTmp=sRxBuf;
+			
+				IF(Debug)
+				
+					Trace("Module HorizonBox: %s Send -> Send RFB version Back %s hex: %s",GetSymbolInstanceName(), sRxBuf,PlotBufferHex(sRxBufTmp));
+					
+				SocketSend (RFB_TCP_Client, sRxBuf);			//Send Same RFB Version Back .
+				State=1;
+			}
+		}	
+	}
+	ELSE IF (State=1)
+	{
+			
+			IF(Debug)
+				Trace("Module HorizonBox: %s Receive <- : Get number of security types and security type (2x Bytes) hex: %s",GetSymbolInstanceName(), PlotBufferHex(RFB_TCP_Client.SocketRxBuf));
+				SocketSend (RFB_TCP_Client,"\x01\x01");	
+	
+			State=2;
+				
+			IF(Debug)
+				Trace("Module HorizonBox: %s Send-> security type 01",GetSymbolInstanceName());
+	}
+	ELSE IF (State=2)
+	{
+			IF(Debug)
+				Trace("Module HorizonBox: %s Receive <- Hn ex: %s",GetSymbolInstanceName(), PlotBufferHex(RFB_TCP_Client.SocketRxBuf));
+	}
+	
+	ClearBuffer(RFB_TCP_Client.SocketRxBuf);
+}
+
+
+SOCKETSTATUS RFB_TCP_Client
+{
+
+    SIGNED_INTEGER Status;
+
+    Status = SocketGetStatus();
+   
+	Trace("The SocketGetStatus returns:       %d\n", Status);
+ 
+	Trace("The RFB_TCP_Client.SocketStatus returns: %d\n", RFB_TCP_Client.SocketStatus);
+}
+
+//******************************************************************************************* Event Handlers
+
+PUSH Connect
+{
+
+	RFB_TCPConnect();
+
+}
+
+RELEASE Connect 
+{
+
+	SocketDisconnectClient (RFB_TCP_Client);
+}
+
+
+PUSH Power
+{
+	SendKey(KEY_PUSH,KEY_POWER);	
+}
+
+RELEASE Power
+{ 	
+	SendKey(KEY_RELEASE,KEY_POWER);
+}
+
+PUSH Help
+{
+	SendKey(KEY_PUSH,KEY_HELP);	
+}
+
+RELEASE Help
+{ 	
+	SendKey(KEY_RELEASE,KEY_HELP);
+}  
+
+PUSH Guide
+{
+	SendKey(KEY_PUSH,KEY_GUIDE);	
+}
+
+RELEASE Guide
+{ 	
+	SendKey(KEY_RELEASE,KEY_GUIDE);
+}
+
+PUSH Info
+{
+	SendKey(KEY_PUSH,KEY_INFO);	
+}
+
+RELEASE Info
+{ 	
+	SendKey(KEY_RELEASE,KEY_INFO);
+}
+
+PUSH Text
+{
+	SendKey(KEY_PUSH,KEY_TEXT);	
+}
+
+RELEASE Text
+{ 	
+	SendKey(KEY_RELEASE,KEY_TEXT);
+}
+
+PUSH Menu
+{
+	SendKey(KEY_PUSH,KEY_MENU);	
+}
+
+RELEASE Menu
+{ 	
+	SendKey(KEY_RELEASE,KEY_MENU);
+}
+
+PUSH Menu1
+{
+	SendKey(KEY_PUSH,KEY_MENU1);	
+}
+
+RELEASE Menu1
+{ 	
+	SendKey(KEY_RELEASE,KEY_MENU1);
+}
+
+PUSH Menu2
+{
+	SendKey(KEY_PUSH,KEY_MENU2);	
+}
+
+RELEASE Menu2
+{ 	
+	SendKey(KEY_RELEASE,KEY_MENU2);
+}
+
+PUSH Menu3
+{
+	SendKey(KEY_PUSH,KEY_MENU3);	
+}
+
+RELEASE Menu3
+{ 	
+	SendKey(KEY_RELEASE,KEY_MENU3);
+}
+
+
+PUSH Menu_Up
+{
+	SendKey(KEY_PUSH,KEY_DPAD_UP);	
+}
+
+RELEASE Menu_Up
+{ 	
+	SendKey(KEY_RELEASE,KEY_DPAD_UP);
+}
+
+PUSH Menu_Down
+{
+	SendKey(KEY_PUSH,KEY_DPAD_DOWN);	
+}
+
+RELEASE Menu_Down
+{ 	
+	SendKey(KEY_RELEASE,KEY_DPAD_DOWN);
+}
+
+PUSH Menu_Left
+{
+	SendKey(KEY_PUSH,KEY_DPAD_LEFT);	
+}
+
+RELEASE Menu_Left
+{ 	
+	SendKey(KEY_RELEASE,KEY_DPAD_LEFT);
+}
+
+PUSH Menu_Right
+{
+	SendKey(KEY_PUSH,KEY_DPAD_RIGHT);	
+}
+
+RELEASE Menu_Right
+{ 	
+	SendKey(KEY_RELEASE,KEY_DPAD_RIGHT);
+}
+
+PUSH Menu_OK
+{
+	SendKey(KEY_PUSH,KEY_OK);	
+}
+
+RELEASE Menu_OK
+{ 	
+	SendKey(KEY_RELEASE,KEY_OK);
+}
+		 
+
+PUSH Back
+{
+	SendKey(KEY_PUSH,KEY_BACK);	
+}
+
+RELEASE Back
+{ 	
+	SendKey(KEY_RELEASE,KEY_BACK);
+}
+
+PUSH Num_0
+{
+	SendKey(KEY_PUSH,KEY_NUM_0);	
+}
+
+RELEASE Num_0
+{ 	
+	SendKey(KEY_RELEASE,KEY_NUM_1);
+}
+
+PUSH Num_1
+{
+	SendKey(KEY_PUSH,KEY_NUM_1);	
+}
+
+RELEASE Num_1
+{ 	
+	SendKey(KEY_RELEASE,KEY_NUM_1);
+}
+
+PUSH Num_2
+{
+	SendKey(KEY_PUSH,KEY_NUM_2);	
+}
+
+RELEASE Num_2
+{ 	
+	SendKey(KEY_RELEASE,KEY_NUM_2);
+}
+	 
+PUSH Num_3
+{
+	SendKey(KEY_PUSH,KEY_NUM_3);	
+}
+
+RELEASE Num_3
+{ 	
+	SendKey(KEY_RELEASE,KEY_NUM_3);
+}
+
+PUSH Num_4
+{
+	SendKey(KEY_PUSH,KEY_NUM_4);	
+}
+
+RELEASE Num_4
+{ 	
+	SendKey(KEY_RELEASE,KEY_NUM_4);
+}
+
+PUSH Num_5
+{
+	SendKey(KEY_PUSH,KEY_NUM_5);	
+}
+
+RELEASE Num_5
+{ 	
+	SendKey(KEY_RELEASE,KEY_NUM_5);
+} 
+
+PUSH Num_6
+{
+	SendKey(KEY_PUSH,KEY_NUM_6);	
+}
+
+RELEASE Num_6
+{ 	
+	SendKey(KEY_RELEASE,KEY_NUM_6);
+}
+
+PUSH Num_7
+{
+	SendKey(KEY_PUSH,KEY_NUM_7);	
+}
+
+RELEASE Num_7
+{ 	
+	SendKey(KEY_RELEASE,KEY_NUM_7);
+}
+
+PUSH Num_8
+{
+	SendKey(KEY_PUSH,KEY_NUM_8);	
+}
+
+RELEASE Num_8
+{ 	
+	SendKey(KEY_RELEASE,KEY_NUM_8);
+}
+
+PUSH Num_9
+{
+	SendKey(KEY_PUSH,KEY_NUM_9);	
+}
+
+RELEASE Num_9
+{ 	
+	SendKey(KEY_RELEASE,KEY_NUM_9);
+}
+
+PUSH Chan_Up
+{
+	SendKey(KEY_PUSH,KEY_CHAN_UP);	
+}
+		 	 
+RELEASE Chan_Up
+{
+	SendKey(KEY_RELEASE,KEY_CHAN_UP);
+}
+
+PUSH Chan_Dwn
+{
+	SendKey(KEY_PUSH,KEY_CHAN_DWN);	
+}
+
+RELEASE Chan_Dwn
+{ 	
+	SendKey(KEY_RELEASE,KEY_CHAN_DWN);
+}
+
+PUSH Pause
+{
+	SendKey(KEY_PUSH,KEY_PAUSE);	
+}
+
+RELEASE Pause
+{ 	
+	SendKey(KEY_RELEASE,KEY_PAUSE);
+}
+
+PUSH Stop
+{
+	SendKey(KEY_PUSH,KEY_STOP);
+}
+
+RELEASE Stop
+{ 	
+	SendKey(KEY_RELEASE,KEY_STOP);
+}
+
+PUSH Record
+{
+	SendKey(KEY_PUSH,KEY_RECORD);	
+}
+
+RELEASE Record
+{ 	
+	SendKey(KEY_RELEASE,KEY_RECORD);
+}
+
+PUSH Fwd
+{
+	SendKey(KEY_PUSH,KEY_FWD);	
+}
+
+RELEASE Fwd
+{ 	
+	SendKey(KEY_RELEASE,KEY_FWD);
+}
+
+PUSH  Rwd
+{
+	SendKey(KEY_PUSH,KEY_RWD);
+}
+
+RELEASE Rwd
+{ 	
+	SendKey(KEY_RELEASE,KEY_RWD);
+}
+
+PUSH ONDEMAND	
+{
+	SendKey(KEY_PUSH,KEY_ONDEMAND);	
+}
+
+RELEASE ONDEMAND	
+{ 	
+	SendKey(KEY_RELEASE,KEY_ONDEMAND);
+}
+
+PUSH Unknown_0
+{
+	SendKey(KEY_PUSH,KEY_UNKNOWN_0);	
+}
+
+RELEASE Unknown_0
+{ 	
+	SendKey(KEY_RELEASE,KEY_UNKNOWN_0);
+}
+
+PUSH Unknown_1
+{
+	SendKey(KEY_PUSH,KEY_UNKNOWN_1);	
+}
+
+RELEASE Unknown_1
+{ 	
+	SendKey(KEY_RELEASE,KEY_UNKNOWN_1);
+}
+
+PUSH Unknown_2
+{
+	SendKey(KEY_PUSH,KEY_UNKNOWN_2);	
+}
+
+RELEASE Unknown_2
+{ 	
+	SendKey(KEY_RELEASE,KEY_UNKNOWN_2);
+}
+
+PUSH Unknown_3
+{
+	SendKey(KEY_PUSH,KEY_UNKNOWN_3);	
+}
+
+RELEASE Unknown_3
+{ 	
+	SendKey(KEY_RELEASE,KEY_UNKNOWN_3);
+}
+
+PUSH Unknown_4
+{
+	SendKey(KEY_PUSH,KEY_UNKNOWN_4);	
+}
+
+RELEASE Unknown_4
+{ 	
+	SendKey(KEY_RELEASE,KEY_UNKNOWN_4);
+}
+
+ 
+//******************************************************************************************* Function Main
+
+Function Main()
+{	
+	State=0;
+    WaitForInitializationComplete();
+}

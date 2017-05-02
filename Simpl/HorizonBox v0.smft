@@ -1,0 +1,5 @@
+<Device Model="QM-RMC">
+   <Network Type="Ethernet" Id="04">
+      <Device Model="XPanel 2.0 Smart Graphics" DeviceId="03"/>
+   </Network>
+</Device>
